@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wann hast du Zeit? ✨</title>
+<style>
+:root{--ink:#4a2f45;--soft:#7b5a74;--pink:#f7a8cf;--pink-d:#c2347a;--card:#fff;--line:#f3d3e5}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;color:var(--ink);background:linear-gradient(#fff5fa,#f1e9ff);font-family:ui-rounded,"Nunito","Segoe UI",system-ui,sans-serif;line-height:1.4}
+main{max-width:460px;margin:0 auto;padding:28px 16px 170px}
+h1{font-size:1.7rem;margin:0 0 6px}
+.sub{margin:0 0 22px;color:var(--soft)}
+.name{display:block;font-weight:700;margin-bottom:6px}
+input{width:100%;padding:14px;border:2px solid var(--line);border-radius:14px;font:inherit;background:#fff;color:inherit}
+input:focus-visible{outline:3px solid var(--pink);border-color:var(--pink-d)}
+.day{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:14px;margin-top:14px}
+.day h2{font-size:1.05rem;margin:0 0 10px}
+.slots{display:flex;flex-wrap:wrap;gap:10px}
+.slot{flex:1 1 40%;padding:14px 8px;border-radius:14px;border:2px solid var(--line);background:#fff;font:inherit;font-weight:700;color:inherit;cursor:pointer}
+.slot[aria-pressed="true"]{background:var(--pink-d);border-color:var(--pink-d);color:#fff}
+.slot:focus-visible{outline:3px solid var(--pink-d);outline-offset:2px}
+.when{display:block;font-size:.9rem;color:var(--soft);margin-bottom:8px}
+.empty{margin-top:22px;text-align:center;color:var(--soft)}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(255,245,250,.94);border-top:1px solid var(--line)}
+.bar-in{max-width:460px;margin:0 auto}
+.hint{text-align:center;font-size:.9rem;color:var(--soft);margin:0 0 8px;min-height:1.3em}
+.send{width:100%;padding:16px;border:0;border-radius:16px;background:#25d366;color:#053b1b;font:inherit;font-weight:800;font-size:1.05rem;cursor:pointer}
+.send:disabled{background:#ddd5db;color:#7d6f7a;cursor:not-allowed}
+.send:focus-visible{outline:3px solid var(--pink-d);outline-offset:2px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Wann hast du Zeit? 🌸</h1>
+  <p class="sub">Tipp auf einen Slot (oder auf mehrere) bzw. such dir am Wochenende eine Uhrzeit aus, gib deinen Vornamen ein und schick mir alles per WhatsApp. ✨</p>
+
+  <label class="name" for="name">Dein Vorname</label>
+  <input id="name" type="text" autocomplete="given-name" placeholder="z. B. Lisa">
+
+  <div id="days"></div>
+</main>
+
+<div class="bar">
+  <div class="bar-in">
+    <p class="hint" id="hint"></p>
+    <button class="send" id="send" disabled>Per WhatsApp an Johanna senden 💬</button>
+  </div>
+</div>
+
+<script>
+// Johannas WhatsApp-Nummer (Landesvorwahl + Nummer, nur Ziffern)
+const WHATSAPP_NUMBER = "393463242645";
+
+// Freie Slots (Stand 23.10.2026)
+const DAYS = [
+  { d: "2026-10-24", free: true },
+  { d: "2026-10-25", free: true },
+  { d: "2026-10-26", s: ["21:20"] },
+  { d: "2026-10-27", s: ["18:00", "22:00"] },
+  { d: "2026-10-28", s: ["18:15", "20:00", "22:00"] },
+  { d: "2026-10-29", s: ["18:15", "20:00", "22:00"] }
+];
+
+const WEEKDAYS = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+const picked = {}; // { "2026-10-24": Set("18:15") }
+
+const $days = document.getElementById("days");
+const $name = document.getElementById("name");
+const $send = document.getElementById("send");
+const $hint = document.getElementById("hint");
+
+function label(d) {
+  const [y, m, t] = d.split("-").map(Number);
+  const wd = WEEKDAYS[new Date(y, m - 1, t).getDay()];
+  return wd + ", " + String(t).padStart(2, "0") + "." + String(m).padStart(2, "0") + ".";
+}
+
+// Jeder Termin dauert 1 Std. 45 Min.
+function range(t) {
+  const [h, m] = t.split(":").map(Number);
+  const e = h * 60 + m + 105;
+  return t + "–" + String(Math.floor(e / 60) % 24).padStart(2, "0") + ":" + String(e % 60).padStart(2, "0");
+}
+
+function render() {
+  const now = new Date();
+  let shown = 0;
+  DAYS.forEach(({ d, s, free }) => {
+    const box = document.createElement("section");
+    box.className = "day";
+    if (free) {
+      if (new Date(d + "T23:59:00") <= now) return;
+      shown++;
+      box.innerHTML = "<h2>" + label(d) + "</h2><label class=\"when\" for=\"t-" + d + "\">Ganztägig flexibel – wann passt es dir? (Dauer ca. 1 Std. 45 Min.)</label><input type=\"time\" id=\"t-" + d + "\">";
+      box.querySelector("input").oninput = e => {
+        picked[d] = new Set(e.target.value ? [e.target.value] : []);
+        update();
+      };
+    } else {
+      const slots = s.filter(t => new Date(d + "T" + t + ":00") > now);
+      if (!slots.length) return;
+      shown++;
+      box.innerHTML = "<h2>" + label(d) + "</h2><div class=\"slots\"></div>";
+      const row = box.querySelector(".slots");
+      slots.forEach(t => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "slot";
+        b.setAttribute("aria-pressed", "false");
+        b.textContent = range(t) + " Uhr";
+        b.onclick = () => {
+          picked[d] = picked[d] || new Set();
+          const on = !picked[d].has(t);
+          on ? picked[d].add(t) : picked[d].delete(t);
+          b.setAttribute("aria-pressed", on);
+          update();
+        };
+        row.appendChild(b);
+      });
+    }
+    $days.appendChild(box);
+  });
+  if (!shown) {
+    $days.innerHTML = "<p class=\"empty\">Gerade sind keine Slots mehr frei. 🌸</p>";
+  }
+}
+
+function count() {
+  return Object.values(picked).reduce((n, set) => n + set.size, 0);
+}
+
+function update() {
+  const hasName = $name.value.trim().length > 0;
+  const n = count();
+  $send.disabled = !(hasName && n > 0);
+  $hint.textContent = !n ? "Wähl mindestens einen Slot aus."
+    : !hasName ? "Gib noch deinen Vornamen ein."
+    : n + (n === 1 ? " Slot" : " Slots") + " gewählt – ab damit! 🎉";
+}
+
+$name.addEventListener("input", update);
+
+$send.onclick = () => {
+  if (!/^\d{8,15}$/.test(WHATSAPP_NUMBER)) {
+    alert("Die WhatsApp-Nummer fehlt noch im Code (WHATSAPP_NUMBER).");
+    return;
+  }
+  const lines = DAYS
+    .filter(({ d }) => picked[d] && picked[d].size)
+    .map(({ d }) => "• " + label(d) + " " + [...picked[d]].sort().map(range).join(" und ") + " Uhr");
+  const msg = "Hi Johanna! 👋 Hier ist " + $name.value.trim() + ". Ich hätte Zeit:\n" + lines.join("\n");
+  window.location.href = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(msg);
+};
+
+render();
+update();
+</script>
+</body>
+</html>
