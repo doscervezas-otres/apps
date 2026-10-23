@@ -13,6 +13,8 @@ h1{font-size:1.7rem;margin:0 0 6px}
 .sub{margin:0 0 22px;color:var(--soft)}
 .name{display:block;font-weight:700;margin-bottom:6px}
 input{width:100%;padding:14px;border:2px solid var(--line);border-radius:14px;font:inherit;background:#fff;color:inherit}
+input[type="time"]{display:block;width:100%;min-width:0;max-width:100%;min-height:50px;-webkit-appearance:none;appearance:none;text-align:left}
+input[type="time"]::-webkit-date-and-time-value{text-align:left;margin:0}
 input:focus-visible{outline:3px solid var(--pink);border-color:var(--pink-d)}
 .day{background:var(--card);border:2px solid var(--line);border-radius:18px;padding:14px;margin-top:14px}
 .day h2{font-size:1.05rem;margin:0 0 10px}
@@ -21,6 +23,8 @@ input:focus-visible{outline:3px solid var(--pink);border-color:var(--pink-d)}
 .slot[aria-pressed="true"]{background:var(--pink-d);border-color:var(--pink-d);color:#fff}
 .slot:focus-visible{outline:3px solid var(--pink-d);outline-offset:2px}
 .when{display:block;font-size:.9rem;color:var(--soft);margin-bottom:8px}
+.err{margin:6px 0 0;font-size:.85rem;color:var(--pink-d)}
+.err:empty{display:none}
 .empty{margin-top:22px;text-align:center;color:var(--soft)}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(255,245,250,.94);border-top:1px solid var(--line)}
 .bar-in{max-width:460px;margin:0 auto}
@@ -54,12 +58,11 @@ const WHATSAPP_NUMBER = "393463242645";
 
 // Freie Slots (Stand 23.10.2026)
 const DAYS = [
-  { d: "2026-10-24", free: true },
-  { d: "2026-10-25", free: true },
-  { d: "2026-10-26", s: ["21:20"] },
-  { d: "2026-10-27", s: ["18:00", "22:00"] },
-  { d: "2026-10-28", s: ["18:15", "20:00", "22:00"] },
-  { d: "2026-10-29", s: ["18:15", "20:00", "22:00"] }
+  { d: "2026-10-24", free: true, busy: [["14:00", "15:45"]] },
+  { d: "2026-10-25", free: true, busy: [["09:00", "10:45"]] },
+  { d: "2026-10-27", s: ["22:00"] },
+  { d: "2026-10-28", s: ["20:00", "22:00"] },
+  { d: "2026-10-29", s: ["18:15", "22:00"] }
 ];
 
 const WEEKDAYS = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
@@ -83,18 +86,33 @@ function range(t) {
   return t + "–" + String(Math.floor(e / 60) % 24).padStart(2, "0") + ":" + String(e % 60).padStart(2, "0");
 }
 
+function mins(t) { const [h, m] = t.split(":").map(Number); return h * 60 + m; }
+function clash(t, busy) {
+  const a = mins(t), b = a + 105;
+  return busy.some(x => a < mins(x[1]) && b > mins(x[0]));
+}
+
 function render() {
   const now = new Date();
   let shown = 0;
-  DAYS.forEach(({ d, s, free }) => {
+  DAYS.forEach(({ d, s, free, busy = [] }) => {
     const box = document.createElement("section");
     box.className = "day";
     if (free) {
       if (new Date(d + "T23:59:00") <= now) return;
       shown++;
-      box.innerHTML = "<h2>" + label(d) + "</h2><label class=\"when\" for=\"t-" + d + "\">Ganztägig flexibel – wann passt es dir? (Dauer ca. 1 Std. 45 Min.)</label><input type=\"time\" id=\"t-" + d + "\">";
+      box.innerHTML = "<h2>" + label(d) + "</h2><label class=\"when\" for=\"t-" + d + "\">Ganztägig flexibel – wann passt es dir? (Dauer ca. 1 Std. 45 Min.)</label><input type=\"time\" id=\"t-" + d + "\"><p class=\"err\"></p>" + (busy.length ? "<p class=\"when\">Schon vergeben: " + busy.map(x => x[0] + "–" + x[1]).join(", ") + " Uhr</p>" : "");
       box.querySelector("input").oninput = e => {
-        picked[d] = new Set(e.target.value ? [e.target.value] : []);
+        const v = e.target.value;
+        const err = box.querySelector(".err");
+        if (v && clash(v, busy)) {
+          err.textContent = "Da bin ich schon verabredet – bitte such dir eine andere Zeit aus. 🙈";
+          e.target.value = "";
+          picked[d] = new Set();
+        } else {
+          err.textContent = "";
+          picked[d] = new Set(v ? [v] : []);
+        }
         update();
       };
     } else {
