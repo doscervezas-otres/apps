@@ -58,8 +58,7 @@ const WHATSAPP_NUMBER = "393463242645";
 
 // Freie Slots (Stand 23.10.2026)
 const DAYS = [
-  { d: "2026-10-24", free: true, busy: [["14:00", "15:45"]] },
-  { d: "2026-10-25", free: true, busy: [["09:00", "10:45"]] },
+  { d: "2026-10-24", free: true, max: "11:30" },
   { d: "2026-10-27", s: ["22:00"] },
   { d: "2026-10-28", s: ["20:00", "22:00"] },
   { d: "2026-10-29", s: ["18:15", "22:00"] }
@@ -95,17 +94,21 @@ function clash(t, busy) {
 function render() {
   const now = new Date();
   let shown = 0;
-  DAYS.forEach(({ d, s, free, busy = [] }) => {
+  DAYS.forEach(({ d, s, free, busy = [], max }) => {
     const box = document.createElement("section");
     box.className = "day";
     if (free) {
       if (new Date(d + "T23:59:00") <= now) return;
       shown++;
-      box.innerHTML = "<h2>" + label(d) + "</h2><label class=\"when\" for=\"t-" + d + "\">Ganztägig flexibel – wann passt es dir? (Dauer ca. 1 Std. 45 Min.)</label><input type=\"time\" id=\"t-" + d + "\"><p class=\"err\"></p>" + (busy.length ? "<p class=\"when\">Schon vergeben: " + busy.map(x => x[0] + "–" + x[1]).join(", ") + " Uhr</p>" : "");
+      box.innerHTML = "<h2>" + label(d) + "</h2><label class=\"when\" for=\"t-" + d + "\">" + (max ? "Wann passt es dir? Letzter Terminbeginn ist " + max + " Uhr (Dauer ca. 1 Std. 45 Min.)" : "Ganztägig flexibel – wann passt es dir? (Dauer ca. 1 Std. 45 Min.)") + "</label><input type=\"time\" id=\"t-" + d + "\"><p class=\"err\"></p>" + (busy.length ? "<p class=\"when\">Schon vergeben: " + busy.map(x => x[0] + "–" + x[1]).join(", ") + " Uhr</p>" : "");
       box.querySelector("input").oninput = e => {
         const v = e.target.value;
         const err = box.querySelector(".err");
-        if (v && clash(v, busy)) {
+        if (v && max && mins(v) > mins(max)) {
+          err.textContent = "Der letzte Terminbeginn ist " + max + " Uhr – bitte such dir eine frühere Zeit aus. 🙈";
+          e.target.value = "";
+          picked[d] = new Set();
+        } else if (v && clash(v, busy)) {
           err.textContent = "Da bin ich schon verabredet – bitte such dir eine andere Zeit aus. 🙈";
           e.target.value = "";
           picked[d] = new Set();
